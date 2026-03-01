@@ -12,11 +12,11 @@ import (
 )
 
 var showCmd = &cobra.Command{
-	Use:     "show [id...] [--id=<id>...]",
+	Use:     "show [id...] [--id=<id>...] [--current]",
 	Aliases: []string{"view"},
 	GroupID: "issues",
 	Short:   "Show issue details",
-	Args:    cobra.ArbitraryArgs, // Allow zero positional args when --id is used
+	Args:    cobra.ArbitraryArgs, // Allow zero positional args when --id or --current is used
 	Run: func(cmd *cobra.Command, args []string) {
 		showThread, _ := cmd.Flags().GetBool("thread")
 		shortMode, _ := cmd.Flags().GetBool("short")
@@ -27,6 +27,7 @@ var showCmd = &cobra.Command{
 		idFlags, _ := cmd.Flags().GetStringArray("id")
 		localTime, _ := cmd.Flags().GetBool("local-time")
 		watchMode, _ := cmd.Flags().GetBool("watch")
+		showCurrent, _ := cmd.Flags().GetBool("current")
 		ctx := rootCtx
 
 		// Helper to format timestamp based on --local-time flag
@@ -41,9 +42,21 @@ var showCmd = &cobra.Command{
 		// This allows IDs that look like flags (e.g., --xyz or gt--abc) to be passed safely
 		args = append(args, idFlags...)
 
+		// Handle --current flag: show the last touched issue
+		if showCurrent {
+			if len(args) > 0 {
+				FatalErrorRespectJSON("--current cannot be combined with explicit issue IDs")
+			}
+			lastTouched := GetLastTouchedID()
+			if lastTouched == "" {
+				FatalErrorRespectJSON("no current issue (no recent create, update, show, or close operation)")
+			}
+			args = []string{lastTouched}
+		}
+
 		// Validate that at least one ID is provided
 		if len(args) == 0 {
-			FatalErrorRespectJSON("at least one issue ID is required (use positional args or --id flag)")
+			FatalErrorRespectJSON("at least one issue ID is required (use positional args, --id flag, or --current)")
 		}
 
 		// Handle --as-of flag: show issue at a specific point in history
@@ -347,6 +360,7 @@ var showCmd = &cobra.Command{
 }
 
 func init() {
+	showCmd.Flags().Bool("current", false, "Show the current (last touched) issue")
 	showCmd.Flags().Bool("thread", false, "Show full conversation thread (for messages)")
 	showCmd.Flags().Bool("short", false, "Show compact one-line output per issue")
 	showCmd.Flags().Bool("long", false, "Show all available fields (extended metadata, agent identity, gate fields, etc.)")
